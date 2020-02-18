@@ -1,5 +1,24 @@
 import argparse
-from pygcode import Line
+from pygcode import *
+
+def append_code_from_file(filename, output_gcode, last_file):
+    output_gcode.append(Line("; start of file " + filename))
+    with open(filename, 'r') as fh:
+        for line_text in fh.readlines():
+            line = Line(line_text)
+            for code in line.block.gcodes:
+                if code == GCodeEndProgram():
+                    # Hopefully only M02 can break continuity
+                    # also hope that there is only M02 on the last line
+                    output_gcode.append(Line("; end of file " + filename))
+                    return
+            output_gcode.append(line)
+    output_gcode.append(Line("; end of file " + filename))
+
+def append_rotation(output_gcode, angle, speed):
+    output_gcode.append(Line("; rotate for " + str(angle)))
+    output_gcode.append(Line(str(GCodeLinearMove(A=angle)) + " " + str(GCodeFeedRate(speed))))
+
 
 parser = argparse.ArgumentParser(description='Simple G-code converter utility for conversion of two input files into one double-sided')
 
@@ -14,19 +33,15 @@ argres = parser.parse_args()
 
 output_gcode = []
 
-with open(argres.file_top, 'r') as fh:
-    for line_text in fh.readlines():
-        line = Line(line_text)
+append_rotation(output_gcode, 0, 1000)
 
-        print(line)  # will print the line (with cosmetic changes)
-        output_gcode.append(line)  # try to just append
+append_code_from_file(argres.file_top, output_gcode, False)
 
-with open(argres.file_bottom, 'r') as fh:
-    for line_text in fh.readlines():
-        line = Line(line_text)
+append_rotation(output_gcode, 180, 1000)
 
-        print(line)  # will print the line (with cosmetic changes)
-        output_gcode.append(line)  # try to just append
+append_code_from_file(argres.file_bottom, output_gcode, True)
+
+output_gcode.append(GCodeEndProgram())
 
 print('\n'.join(str(line) for line in output_gcode))
 
